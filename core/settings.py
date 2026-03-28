@@ -43,7 +43,7 @@ INSTALLED_APPS = [
     'corsheaders',
 
     'auth_app',
-    'kanmind',
+    'kanban_app',
 ]
 
 MIDDLEWARE = [
