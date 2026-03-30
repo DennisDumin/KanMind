@@ -226,3 +226,6 @@ class BoardUpdateResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Board
         fields = ["id", "title", "owner_data", "members_data"]
+
+class EmailCheckQuerySerializer(serializers.Serializer):
+    email = serializers.EmailField()
