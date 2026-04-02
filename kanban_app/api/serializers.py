@@ -99,11 +99,11 @@ class TaskWriteSerializer(serializers.ModelSerializer):
 
     def validate_board(self, value):
         request = self.context["request"]
-        if not user_is_board_member(request.user, value):
+        if value.owner_id != request.user.id and not user_is_board_member(request.user, value):
             raise serializers.ValidationError(
                 "You must be a member of the board."
             )
-        return value
+        return value    
 
     def validate(self, attrs):
         self._validate_board_change(attrs)
@@ -153,7 +153,10 @@ class BoardListSerializer(serializers.ModelSerializer):
         ]
 
     def get_member_count(self, obj):
-        return obj.members.count()
+        count = obj.members.count()
+        if not obj.members.filter(id=obj.owner_id).exists():
+            count += 1
+        return count
 
     def get_ticket_count(self, obj):
         return obj.tasks.count()
@@ -191,7 +194,8 @@ class BoardWriteSerializer(serializers.ModelSerializer):
             owner=self.context["request"].user,
             **validated_data,
         )
-        board.members.set(members)
+        board.members.add(self.context["request"].user)
+        board.members.add(*members)
         return board
 
     def update(self, instance, validated_data):

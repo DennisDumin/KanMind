@@ -16,6 +16,7 @@ from .permissions import (
     IsTaskBoardMember,
     IsTaskCreatorOrBoardOwner,
     is_board_member,
+    is_board_owner,
 )
 from .serializers import (
     BoardDetailSerializer,
@@ -178,7 +179,7 @@ class CommentListCreateView(ListCreateAPIView):
             Task.objects.select_related("board"),
             pk=self.kwargs["task_id"],
         )
-        if not is_board_member(self.request.user, task.board):
+        if not (is_board_owner(self.request.user, task.board) or is_board_member(self.request.user, task.board)):
             raise PermissionDenied("You must be a board member.")
         return task
 
