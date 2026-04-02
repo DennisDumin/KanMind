@@ -127,7 +127,7 @@ class TaskWriteSerializer(serializers.ModelSerializer):
         if key not in attrs:
             return
         user = attrs.get(key)
-        if user and not user_is_board_member(user, board):
+        if user and board.owner_id != user.id and not user_is_board_member(user, board):
             raise serializers.ValidationError(
                 {field_name: ["User must be a member of the board."]}
             )
