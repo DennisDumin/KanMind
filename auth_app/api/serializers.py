@@ -5,12 +5,15 @@ from rest_framework import serializers
 
 
 class RegistrationSerializer(serializers.Serializer):
+    """Serializer for user registration with email uniqueness and password validation."""
+
     fullname = serializers.CharField(max_length=150)
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
     repeated_password = serializers.CharField(write_only=True)
 
     def validate_email(self, value):
+        """Ensure the email is unique (case-insensitive)."""
         email = value.lower().strip()
         if User.objects.filter(email__iexact=email).exists():
             raise serializers.ValidationError(
@@ -19,6 +22,7 @@ class RegistrationSerializer(serializers.Serializer):
         return email
 
     def validate(self, attrs):
+        """Ensure passwords match and meet Django password requirements."""
         if attrs["password"] != attrs["repeated_password"]:
             raise serializers.ValidationError(
                 {"repeated_password": ["Passwords do not match."]}
@@ -27,6 +31,7 @@ class RegistrationSerializer(serializers.Serializer):
         return attrs
 
     def create(self, validated_data):
+        """Create a new user with the validated data."""
         return User.objects.create_user(
             username=validated_data["email"],
             email=validated_data["email"],
@@ -36,10 +41,13 @@ class RegistrationSerializer(serializers.Serializer):
 
 
 class LoginSerializer(serializers.Serializer):
+    """Serializer for user login with email and password authentication."""
+
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
+        """Authenticate the user and attach the user object to validated data."""
         email = attrs["email"].lower().strip()
         user = authenticate(username=email, password=attrs["password"])
         if not user:

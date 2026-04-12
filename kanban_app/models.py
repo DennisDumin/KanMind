@@ -3,6 +3,8 @@ from django.db import models
 
 
 class Board(models.Model):
+    """Represents a Kanban board owned by a user with optional members."""
+
     title = models.CharField(max_length=64)
     owner = models.ForeignKey(
         User,
@@ -25,6 +27,8 @@ class Board(models.Model):
 
 
 class TaskStatus(models.TextChoices):
+    """Choices for the current status of a task."""
+
     TO_DO = "to-do", "To do"
     IN_PROGRESS = "in-progress", "In progress"
     REVIEW = "review", "Review"
@@ -32,12 +36,16 @@ class TaskStatus(models.TextChoices):
 
 
 class TaskPriority(models.TextChoices):
+    """Choices for the priority level of a task."""
+
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
     HIGH = "high", "High"
 
 
 class Task(models.Model):
+    """Represents a task within a board, with assignment and review workflow."""
+
     board = models.ForeignKey(
         Board,
         on_delete=models.CASCADE,
@@ -84,6 +92,8 @@ class Task(models.Model):
 
 
 class Comment(models.Model):
+    """Represents a comment on a task, authored by a user."""
+
     task = models.ForeignKey(
         Task,
         on_delete=models.CASCADE,

@@ -5,6 +5,8 @@ from .models import Board, Comment, Task
 
 @admin.register(Board)
 class BoardAdmin(admin.ModelAdmin):
+    """Admin configuration for the Board model."""
+
     list_display = ("id", "title", "owner")
     search_fields = ("title", "owner__email")
     filter_horizontal = ("members",)
@@ -12,6 +14,8 @@ class BoardAdmin(admin.ModelAdmin):
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
+    """Admin configuration for the Task model."""
+
     list_display = (
         "id",
         "title",
@@ -29,5 +33,7 @@ class TaskAdmin(admin.ModelAdmin):
 
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
+    """Admin configuration for the Comment model."""
+
     list_display = ("id", "task", "author", "created_at")
     search_fields = ("content", "author__email")
