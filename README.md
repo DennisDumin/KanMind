@@ -6,8 +6,8 @@ The API supports role-based access control with board owners, members, and task 
 
 ## Technologies
 
-- Python
-- Django
+- Python 3.14.2
+- Django 6.0.3
 - Django REST Framework
 - SQLite
 
