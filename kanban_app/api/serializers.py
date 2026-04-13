@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
+from rest_framework.exceptions import NotFound, PermissionDenied
 
 from kanban_app.models import Board, Comment, Task, TaskPriority, TaskStatus
 
@@ -86,6 +87,7 @@ class TaskWriteSerializer(serializers.ModelSerializer):
         allow_null=True,
         required=False,
     )
+    board = serializers.IntegerField(write_only=True, required=True)
 
     class Meta:
         model = Task
@@ -112,16 +114,21 @@ class TaskWriteSerializer(serializers.ModelSerializer):
         return value
 
     def validate_board(self, value):
-        """Ensure the requesting user is a member or owner of the board."""
+        """Validate board exists (404) and user is a member (403)."""
+        try:
+            board = Board.objects.get(pk=value)
+        except Board.DoesNotExist:
+            raise NotFound("Board not found.")
+
         request = self.context["request"]
         if (
-            value.owner_id != request.user.id
-            and not user_is_board_member(request.user, value)
+            board.owner_id != request.user.id
+            and not user_is_board_member(request.user, board)
         ):
-            raise serializers.ValidationError(
+            raise PermissionDenied(
                 "You must be a member of the board."
             )
-        return value
+        return board
 
     def validate(self, attrs):
         """Validate board change restrictions and member field assignments."""
@@ -159,49 +166,8 @@ class TaskWriteSerializer(serializers.ModelSerializer):
             )
 
 
-class BoardListSerializer(serializers.ModelSerializer):
-    """Serializer for the board list view with aggregated counts."""
-
-    member_count = serializers.SerializerMethodField()
-    ticket_count = serializers.SerializerMethodField()
-    tasks_to_do_count = serializers.SerializerMethodField()
-    tasks_high_prio_count = serializers.SerializerMethodField()
-    owner_id = serializers.IntegerField(read_only=True)
-
-    class Meta:
-        model = Board
-        fields = [
-            "id",
-            "title",
-            "member_count",
-            "ticket_count",
-            "tasks_to_do_count",
-            "tasks_high_prio_count",
-            "owner_id",
-        ]
-
-    def get_member_count(self, obj):
-        """Return total member count including the owner."""
-        count = obj.members.count()
-        if not obj.members.filter(id=obj.owner_id).exists():
-            count += 1
-        return count
-
-    def get_ticket_count(self, obj):
-        """Return the total number of tasks on the board."""
-        return obj.tasks.count()
-
-    def get_tasks_to_do_count(self, obj):
-        """Return the number of tasks with 'to-do' status."""
-        return obj.tasks.filter(status=TaskStatus.TO_DO).count()
-
-    def get_tasks_high_prio_count(self, obj):
-        """Return the number of tasks with 'high' priority."""
-        return obj.tasks.filter(priority=TaskPriority.HIGH).count()
-
-
-class BoardWriteSerializer(serializers.ModelSerializer):
-    """Serializer for creating and updating boards with member management."""
+class BoardSerializer(serializers.ModelSerializer):
+    """Unified serializer for boards. Uses to_representation for different responses."""
 
     members = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(),
@@ -245,32 +211,71 @@ class BoardWriteSerializer(serializers.ModelSerializer):
 
         return instance
 
+    def to_representation(self, instance):
+        """Return different representations based on the view action."""
+        action = self._get_action()
 
-class BoardDetailSerializer(serializers.ModelSerializer):
-    """Detailed board serializer including full member and task data."""
+        if action == "retrieve":
+            return self._detail_representation(instance)
+        elif action == "update_response":
+            return self._update_representation(instance)
+        else:
+            return self._list_representation(instance)
 
-    owner_id = serializers.IntegerField(read_only=True)
-    members = UserPreviewSerializer(many=True, read_only=True)
-    tasks = TaskReadSerializer(many=True, read_only=True)
+    def _get_action(self):
+        """Determine the current action from view or context."""
+        if "view_action" in self.context:
+            return self.context["view_action"]
 
-    class Meta:
-        model = Board
-        fields = ["id", "title", "owner_id", "members", "tasks"]
+        view = self.context.get("view")
+        if view and hasattr(view, "action"):
+            return view.action
+        return "list"
 
+    def _list_representation(self, instance):
+        """Board list representation with aggregated counts."""
+        member_count = instance.members.count()
+        if not instance.members.filter(id=instance.owner_id).exists():
+            member_count += 1
 
-class BoardUpdateResponseSerializer(serializers.ModelSerializer):
-    """Response serializer for board updates with expanded owner and member data."""
+        return {
+            "id": instance.id,
+            "title": instance.title,
+            "member_count": member_count,
+            "ticket_count": instance.tasks.count(),
+            "tasks_to_do_count": instance.tasks.filter(
+                status=TaskStatus.TO_DO,
+            ).count(),
+            "tasks_high_prio_count": instance.tasks.filter(
+                priority=TaskPriority.HIGH,
+            ).count(),
+            "owner_id": instance.owner_id,
+        }
 
-    owner_data = UserPreviewSerializer(source="owner", read_only=True)
-    members_data = UserPreviewSerializer(
-        source="members",
-        many=True,
-        read_only=True,
-    )
+    def _detail_representation(self, instance):
+        """Board detail representation with full member and task data."""
+        return {
+            "id": instance.id,
+            "title": instance.title,
+            "owner_id": instance.owner_id,
+            "members": UserPreviewSerializer(
+                instance.members.all(), many=True,
+            ).data,
+            "tasks": TaskReadSerializer(
+                instance.tasks.all(), many=True,
+            ).data,
+        }
 
-    class Meta:
-        model = Board
-        fields = ["id", "title", "owner_data", "members_data"]
+    def _update_representation(self, instance):
+        """Board update response with expanded owner and member data."""
+        return {
+            "id": instance.id,
+            "title": instance.title,
+            "owner_data": UserPreviewSerializer(instance.owner).data,
+            "members_data": UserPreviewSerializer(
+                instance.members.all(), many=True,
+            ).data,
+        }
 
 
 class EmailCheckQuerySerializer(serializers.Serializer):

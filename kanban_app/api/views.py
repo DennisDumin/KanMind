@@ -19,10 +19,7 @@ from .permissions import (
     is_board_owner,
 )
 from .serializers import (
-    BoardDetailSerializer,
-    BoardListSerializer,
-    BoardUpdateResponseSerializer,
-    BoardWriteSerializer,
+    BoardSerializer,
     CommentCreateSerializer,
     CommentReadSerializer,
     EmailCheckQuerySerializer,
@@ -35,29 +32,17 @@ from .serializers import (
 class BoardViewSet(viewsets.ModelViewSet):
     """ViewSet for board CRUD operations with role-based permissions."""
 
-    queryset = Board.objects.select_related("owner").prefetch_related(
-        "members",
-        "tasks",
-    )
-    serializer_class = BoardListSerializer
+    serializer_class = BoardSerializer
     http_method_names = ["get", "post", "patch", "delete"]
 
     def get_queryset(self):
         """Return boards where the user is owner or member."""
-        user = self.request.user
-        return self.queryset.filter(
-            Q(owner=user) | Q(members=user)
+        return Board.objects.select_related("owner").prefetch_related(
+            "members",
+            "tasks",
+        ).filter(
+            Q(owner=self.request.user) | Q(members=self.request.user)
         ).distinct()
-
-    def get_serializer_class(self):
-        """Return the appropriate serializer based on the current action."""
-        serializer_map = {
-            "list": BoardListSerializer,
-            "retrieve": BoardDetailSerializer,
-            "create": BoardWriteSerializer,
-            "partial_update": BoardWriteSerializer,
-        }
-        return serializer_map.get(self.action, BoardListSerializer)
 
     def get_permissions(self):
         """Return permissions based on the current action."""
@@ -68,12 +53,23 @@ class BoardViewSet(viewsets.ModelViewSet):
         }
         return permission_map.get(self.action, [IsAuthenticated()])
 
+    def get_object(self):
+        """Retrieve board from all boards to ensure 403 instead of 404."""
+        board = get_object_or_404(
+            Board.objects.select_related("owner").prefetch_related(
+                "members", "tasks",
+            ),
+            pk=self.kwargs["pk"],
+        )
+        self.check_object_permissions(self.request, board)
+        return board
+
     def create(self, request, *args, **kwargs):
         """Create a new board and return the board list representation."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         board = serializer.save()
-        data = BoardListSerializer(board).data
+        data = BoardSerializer(board, context={"view_action": "list"}).data
         return Response(data, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request, *args, **kwargs):
@@ -86,7 +82,9 @@ class BoardViewSet(viewsets.ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
         board = serializer.save()
-        data = BoardUpdateResponseSerializer(board).data
+        data = BoardSerializer(
+            board, context={"view_action": "update_response"},
+        ).data
         return Response(data, status=status.HTTP_200_OK)
 
 
@@ -109,20 +107,16 @@ class EmailCheckView(APIView):
 class TaskViewSet(viewsets.ModelViewSet):
     """ViewSet for task creation, update and deletion with board membership checks."""
 
-    queryset = Task.objects.select_related(
-        "board",
-        "creator",
-        "assignee",
-        "reviewer",
-    ).prefetch_related("comments")
     serializer_class = TaskReadSerializer
     http_method_names = ["post", "patch", "delete"]
 
     def get_queryset(self):
         """Return tasks from boards where the user is owner or member."""
-        user = self.request.user
-        return self.queryset.filter(
-            Q(board__owner=user) | Q(board__members=user)
+        return Task.objects.select_related(
+            "board", "creator", "assignee", "reviewer",
+        ).prefetch_related("comments").filter(
+            Q(board__owner=self.request.user)
+            | Q(board__members=self.request.user)
         ).distinct()
 
     def get_serializer_class(self):
@@ -138,6 +132,17 @@ class TaskViewSet(viewsets.ModelViewSet):
             "destroy": [IsAuthenticated(), IsTaskCreatorOrBoardOwner()],
         }
         return permission_map.get(self.action, [IsAuthenticated()])
+
+    def get_object(self):
+        """Retrieve task from all tasks to ensure 403 instead of 404."""
+        task = get_object_or_404(
+            Task.objects.select_related(
+                "board", "creator", "assignee", "reviewer",
+            ).prefetch_related("comments"),
+            pk=self.kwargs["pk"],
+        )
+        self.check_object_permissions(self.request, task)
+        return task
 
     def create(self, request, *args, **kwargs):
         """Create a new task and set the requesting user as creator."""
@@ -170,10 +175,9 @@ class AssignedToMeTaskListView(ListAPIView):
     def get_queryset(self):
         """Return tasks where the current user is the assignee."""
         return Task.objects.select_related(
-            "assignee",
-            "reviewer",
+            "assignee", "reviewer",
         ).prefetch_related("comments").filter(
-            assignee=self.request.user
+            assignee=self.request.user,
         )
 
 
@@ -186,10 +190,9 @@ class ReviewingTaskListView(ListAPIView):
     def get_queryset(self):
         """Return tasks where the current user is the reviewer."""
         return Task.objects.select_related(
-            "assignee",
-            "reviewer",
+            "assignee", "reviewer",
         ).prefetch_related("comments").filter(
-            reviewer=self.request.user
+            reviewer=self.request.user,
         )
 
 
