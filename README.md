@@ -111,11 +111,6 @@ The project uses SQLite (`db.sqlite3`), which is automatically created when runn
 |--------|----------|-------------|
 | GET | `/api/email-check/?email=<email>` | Look up user by email |
 
-## API Documentation
-
-Detailed API endpoint documentation:
-https://cdn.developerakademie.com/courses/Backend/EndpointDoku/index.html?name=kanmind
-
 ## Authentication
 
 Protected endpoints require a token header:
